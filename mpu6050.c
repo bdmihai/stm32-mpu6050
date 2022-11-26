@@ -34,7 +34,18 @@ static mpu6050_hw_control_t hw;
 static void write_register(const uint8_t reg, const uint8_t value)
 {
     const uint8_t data[2] = { reg, value };
+
     hw.data_wr(hw.address, data, sizeof(data));
+}
+
+static uint8_t read_register(const uint8_t reg)
+{
+    uint8_t value;
+
+    hw.data_wr(hw.address, &reg, 1);
+    hw.data_rd(hw.address, &value, 1);
+
+    return value;
 }
 
 static void read(uint8_t reg, uint8_t *data, uint16_t size)
@@ -47,9 +58,18 @@ void mpu6050_init(mpu6050_hw_control_t hw_control)
 {
     hw = hw_control;
 
-    write_register(MPU6050_RA_GYRO_CONFIG,  0x00);  // ± 250 °/s
-    write_register(MPU6050_RA_ACCEL_CONFIG, 0x00); // ± 2g
-    write_register(MPU6050_RA_PWR_MGMT_1,   0x01);   // PLL with X axis gyroscope reference
+    write_register(MPU6050_RA_GYRO_CONFIG,  MPU6050_GYRO_FS_250);       // ± 250 °/s
+    write_register(MPU6050_RA_ACCEL_CONFIG, MPU6050_ACCEL_FS_2);        // ± 2g
+    write_register(MPU6050_RA_PWR_MGMT_1,   MPU6050_CLOCK_PLL_XGYRO);   // PLL with X axis gyroscope reference
+
+
+    write_register(MPU6050_RA_SMPLRT_DIV, 9);                   // 100Hz
+    write_register(MPU6050_RA_CONFIG,     MPU6050_DLPF_BW_98);  // 100Hz Bandwidth / 3ms delay
+
+    write_register(MPU6050_RA_INT_PIN_CFG,   MPU6050_INTCFG_LATCH_INT_EN_BIT); // enable interupt when data is ready
+    write_register(MPU6050_RA_INT_ENABLE,   0x01); // enable interupt when data is ready
+
+    read_register(MPU6050_RA_INT_STATUS);
 }
 
 mpu6050_data_t mpu6050_get_motion()
@@ -57,11 +77,12 @@ mpu6050_data_t mpu6050_get_motion()
     mpu6050_data_t motion;
     uint8_t buffer[14];
     
+    read_register(MPU6050_RA_INT_STATUS);
     read(MPU6050_RA_ACCEL_XOUT_H, buffer, sizeof(buffer));
 
-    motion.ax   = ((int16_t)(((uint16_t)buffer[ 0] << 8) | (uint16_t)buffer[ 1]))/16384.0F;
-    motion.ay   = ((int16_t)(((uint16_t)buffer[ 2] << 8) | (uint16_t)buffer[ 3]))/16384.0F;
-    motion.az   = ((int16_t)(((uint16_t)buffer[ 4] << 8) | (uint16_t)buffer[ 5]))/16384.0F;
+    motion.ax   = ((int16_t)(((uint16_t)buffer[ 0] << 8) | (uint16_t)buffer[ 1]))/16384.0F * 9.8f;
+    motion.ay   = ((int16_t)(((uint16_t)buffer[ 2] << 8) | (uint16_t)buffer[ 3]))/16384.0F * 9.8f;
+    motion.az   = ((int16_t)(((uint16_t)buffer[ 4] << 8) | (uint16_t)buffer[ 5]))/16384.0F * 9.8f;
     motion.temp = ((int16_t)(((uint16_t)buffer[ 6] << 8) | (uint16_t)buffer[ 5]))/340.0F + 36.53F;
     motion.gx   = ((int16_t)(((uint16_t)buffer[ 8] << 8) | (uint16_t)buffer[ 9]))/131.0F;
     motion.gy   = ((int16_t)(((uint16_t)buffer[10] << 8) | (uint16_t)buffer[11]))/131.0F;
